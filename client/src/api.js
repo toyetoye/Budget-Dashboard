@@ -20,6 +20,7 @@ const api = {
   listUsers: () => apiFetch('/auth/users'),
   createUser: u => apiFetch('/auth/users', { method: 'POST', body: JSON.stringify(u) }),
   updateUser: (id, u) => apiFetch(`/auth/users/${id}`, { method: 'PUT', body: JSON.stringify(u) }),
+  deleteUser: id => apiFetch(`/auth/users/${id}`, { method: 'DELETE' }),
   listVessels: () => apiFetch('/vessels'),
   getVessel: id => apiFetch(`/vessels/${id}`),
   createVessel: v => apiFetch('/vessels', { method: 'POST', body: JSON.stringify(v) }),
