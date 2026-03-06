@@ -147,7 +147,16 @@ export default function AdminUsers() {
                 ) : '—'}
               </td>
               <td className="px-5 py-3"><span className={`px-2 py-0.5 rounded text-xs ${u.active ? 'bg-emerald-900/30 text-emerald-300' : 'bg-red-900/30 text-red-300'}`}>{u.active ? 'Active' : 'Inactive'}</span></td>
-              <td className="px-5 py-3"><button onClick={() => startEdit(u)} className="text-xs text-cyan-400">Edit</button></td>
+              <td className="px-5 py-3 flex items-center gap-2">
+                <button onClick={() => startEdit(u)} className="text-xs text-cyan-400">Edit</button>
+                <button onClick={async () => {
+                  if (!confirm(`Delete user "${u.display_name || u.username}"? This cannot be undone.`)) return;
+                  if (!confirm(`Are you sure? Type YES in the next prompt to confirm.`)) return;
+                  const answer = prompt(`Type YES to permanently delete ${u.display_name || u.username}:`);
+                  if (answer !== 'YES') return;
+                  try { await api.deleteUser(u.id); loadData(); } catch (e) { alert(e.message); }
+                }} className="text-xs text-red-400 hover:text-red-300">Delete</button>
+              </td>
             </tr>
           ))}</tbody>
         </table>
