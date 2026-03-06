@@ -120,4 +120,15 @@ router.put('/users/:id', authenticate, adminOnly, async (req, res) => {
   finally { client.release(); }
 });
 
+// Delete user (admin only) - prevents deleting yourself
+router.delete('/users/:id', authenticate, adminOnly, async (req, res) => {
+  try {
+    const userId = parseInt(req.params.id);
+    if (userId === req.user.id) return res.status(400).json({ error: 'Cannot delete your own account' });
+    await pool.query('DELETE FROM user_vessels WHERE user_id = $1', [userId]);
+    await pool.query('DELETE FROM users WHERE id = $1', [userId]);
+    res.json({ success: true });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
 module.exports = router;
