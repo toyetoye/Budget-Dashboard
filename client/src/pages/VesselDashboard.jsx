@@ -2,6 +2,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { PieChart, Pie, Cell, BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from 'recharts';
 import { useAuth } from '../App';
 import api from '../api';
+import IndentDetailModal from '../components/IndentDetailModal';
 import CostElementPicker from '../components/CostElementPicker';
 
 const fmt = n => '$' + Number(n).toLocaleString('en-US', { maximumFractionDigits: 0 });
@@ -25,7 +26,9 @@ export default function VesselDashboard({ vesselIdProp, hideIndents = false }) {
   const [vessel, setVessel] = useState(null);
   const [budgets, setBudgets] = useState([]);
   const [allIndents, setAllIndents] = useState([]);
+  const [costGroups, setCostGroups] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [selectedIndent, setSelectedIndent] = useState(null);
   const [indentSrc, setIndentSrc] = useState('HO');
   const [statusFilter, setStatusFilter] = useState('All');
   const [searchQ, setSearchQ] = useState('');
@@ -40,11 +43,11 @@ export default function VesselDashboard({ vesselIdProp, hideIndents = false }) {
   const [bprLoading, setBprLoading] = useState(false);
   const [bprFilter, setBprFilter] = useState('All');
   const [bprSearch, setBprSearch] = useState('');
-  const [bprMeta, setBprMeta] = useState(null); // upload metadata
+  const [bprMeta, setBprMeta] = useState(null);
   const [budgetYear, setBudgetYear] = useState(new Date().getFullYear());
 
   useEffect(()=>{if(vesselId)loadAll();},[vesselId, budgetYear]);
-  const loadAll=async()=>{setLoading(true);try{const[v,b,i]=await Promise.all([api.getVessel(vesselId),api.getBudgets(vesselId,budgetYear),api.getIndents(vesselId)]);setVessel(v);setBudgets(b);setAllIndents(i);}catch(e){console.error(e);}finally{setLoading(false);}};
+  const loadAll=async()=>{setLoading(true);try{const[v,b,i,cg]=await Promise.all([api.getVessel(vesselId),api.getBudgets(vesselId,budgetYear),api.getIndents(vesselId),api.getCostGroups()]);setVessel(v);setBudgets(b);setAllIndents(i);setCostGroups(cg);}catch(e){console.error(e);}finally{setLoading(false);}};
 
   const ho=allIndents.filter(i=>i.source==='HO'&&!i.is_carried_forward);
   const op=allIndents.filter(i=>i.source==='Outport'&&!i.is_carried_forward);
@@ -56,7 +59,6 @@ export default function VesselDashboard({ vesselIdProp, hideIndents = false }) {
     return true;
   });
 
-  // Drill-down: indents for a specific sub-category
   const drillIndents = drillSub ? allIndents.filter(i=>i.sub_category===drillSub) : [];
 
   const categories=useMemo(()=>{
@@ -158,7 +160,6 @@ export default function VesselDashboard({ vesselIdProp, hideIndents = false }) {
 
       {/* CATEGORIES with drill-down */}
       {tab==='categories'&&!drillSub&&<div className="space-y-6">
-        {/* Budget action bar for admin/superintendent */}
         {canEditBudget && <div className="flex items-center gap-3">
           {budgetDirty && <button onClick={saveBudgets} className="px-4 py-2 rounded-lg text-sm font-semibold text-white animate-pulse" style={{background:'#0F766E'}}>Save Budget Changes</button>}
           <button onClick={()=>setShowAddBudget(!showAddBudget)} className="px-4 py-2 rounded-lg text-sm text-cyan-300 bg-cyan-900/20 border border-cyan-800/30">+ Add Budget Line</button>
@@ -222,7 +223,7 @@ export default function VesselDashboard({ vesselIdProp, hideIndents = false }) {
           <table className="w-full text-sm"><thead><tr className="border-b border-white/6">
             {['Indent #','Title','Source','Status','Cost USD'].map(h=><th key={h} className="px-4 py-3 text-left text-xs text-slate-600 uppercase">{h}</th>)}
           </tr></thead><tbody>{drillIndents.map((ind,i)=>(
-            <tr key={i} className="border-b border-white/[0.03] hover:bg-white/[0.02]">
+            <tr key={i} className="border-b border-white/[0.03] hover:bg-white/[0.03] cursor-pointer transition-colors" onClick={()=>setSelectedIndent(ind)}>
               <td className="px-4 py-3 font-mono text-xs text-cyan-300">{ind.indent_number}</td>
               <td className="px-4 py-3 text-xs">{ind.title}</td>
               <td className="px-4 py-3 text-xs"><span className={`px-2 py-0.5 rounded text-xs ${ind.source==='HO'?'bg-blue-900/30 text-blue-300':'bg-purple-900/30 text-purple-300'}`}>{ind.source}{ind.is_carried_forward?' (C/F)':''}</span></td>
@@ -249,7 +250,6 @@ export default function VesselDashboard({ vesselIdProp, hideIndents = false }) {
           <div key={st} className="rounded-xl p-4 border border-white/5 text-center" style={{background:'rgba(15,23,42,0.6)'}}><div className="text-2xl font-bold" style={{color:cl}}>{statusCounts[st]||0}</div><div className="text-xs mt-1 uppercase text-slate-600">{st}</div></div>
         ))}</div>
 
-        {/* Search and filters */}
         <div className="flex items-center gap-3 flex-wrap">
           <input value={searchQ} onChange={e=>setSearchQ(e.target.value)} placeholder="Search by title, indent #, sub-category..." className={`${inp} max-w-xs`}/>
           <div className="flex items-center gap-2">
@@ -278,7 +278,7 @@ export default function VesselDashboard({ vesselIdProp, hideIndents = false }) {
           <table className="w-full text-sm"><thead><tr style={{borderBottom:'1px solid rgba(255,255,255,0.06)'}}>
             {['Indent #','Title','Cost Group','Sub-Category','Status',indentSrc==='Outport'?'NGN':'','Cost USD'].filter(Boolean).map(h=><th key={h} className="px-4 py-3 text-left text-xs text-slate-600 uppercase">{h}</th>)}
           </tr></thead><tbody>{filtered.map((ind,i)=>(
-            <tr key={i} className="hover:bg-white/[0.02]" style={{borderBottom:'1px solid rgba(255,255,255,0.03)'}}>
+            <tr key={i} className="hover:bg-white/[0.03] cursor-pointer transition-colors" style={{borderBottom:'1px solid rgba(255,255,255,0.03)'}} onClick={()=>setSelectedIndent(ind)}>
               <td className="px-4 py-3 font-mono text-xs text-cyan-300">{ind.indent_number}</td>
               <td className="px-4 py-3 text-xs max-w-xs truncate">{ind.title}</td>
               <td className="px-4 py-3 text-xs text-slate-500">{ind.cost_group}</td>
@@ -345,7 +345,6 @@ export default function VesselDashboard({ vesselIdProp, hideIndents = false }) {
                 </button>
               ))}
             </div>
-            {/* Import all unmatched button */}
             {canEditBudget && bprData.comparison.filter(c=>c.status==='unmatched').length > 0 && (
               <button onClick={async()=>{
                 const unmatched = bprData.comparison.filter(c=>c.status==='unmatched');
@@ -414,6 +413,24 @@ export default function VesselDashboard({ vesselIdProp, hideIndents = false }) {
         {!bprData && !bprLoading && <div className="text-center py-16 text-slate-600 text-sm">{canEditBudget ? 'Upload a BPR Excel file to begin comparison' : 'No BPR data uploaded yet. Contact your superintendent.'}</div>}
         {bprLoading && <div className="text-center py-16 text-slate-500 text-sm">Loading BPR data...</div>}
       </div>}
+
+      {/* INDENT EDIT/DELETE MODAL */}
+      <IndentDetailModal
+        indent={selectedIndent}
+        costGroups={costGroups}
+        vesselId={vesselId}
+        onClose={() => setSelectedIndent(null)}
+        onSave={async (vId, indentId, data) => {
+          await api.updateIndent(vId, indentId, data);
+          setSelectedIndent(null);
+          loadAll();
+        }}
+        onDelete={async (vId, indentId) => {
+          await api.deleteIndent(vId, indentId);
+          setSelectedIndent(null);
+          loadAll();
+        }}
+      />
     </div>
   );
 }
