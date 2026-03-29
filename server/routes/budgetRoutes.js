@@ -13,12 +13,15 @@ router.get('/:vesselId', authenticate, async (req, res) => {
     const year = req.query.year || new Date().getFullYear();
     const budgets = await pool.query('SELECT * FROM budget_categories WHERE vessel_id=$1 AND year=$2 ORDER BY cost_group, sub_category', [vid, year]);
     const actuals = await pool.query(`
-      SELECT sub_category,
-        SUM(CASE WHEN source='HO' AND is_carried_forward=false THEN cost_usd ELSE 0 END) as ho_spent,
-        SUM(CASE WHEN source='Outport' AND is_carried_forward=false THEN cost_usd ELSE 0 END) as outport_spent,
-        SUM(CASE WHEN is_carried_forward=true THEN cost_usd ELSE 0 END) as cf_spent,
-        SUM(cost_usd) as total_spent
-      FROM indents WHERE vessel_id=$1 GROUP BY sub_category`, [vid]);
+      SELECT il.sub_category,
+        SUM(CASE WHEN i.source='HO' AND COALESCE(i.is_carried_forward,false)=false THEN il.cost_usd ELSE 0 END) as ho_spent,
+        SUM(CASE WHEN i.source='Outport' AND COALESCE(i.is_carried_forward,false)=false THEN il.cost_usd ELSE 0 END) as outport_spent,
+        SUM(CASE WHEN COALESCE(i.is_carried_forward,false)=true THEN il.cost_usd ELSE 0 END) as cf_spent,
+        SUM(il.cost_usd) as total_spent
+      FROM indent_lines il
+      JOIN indents i ON il.indent_id = i.id
+      WHERE i.vessel_id=$1
+      GROUP BY il.sub_category`, [vid]);
     const am = {}; actuals.rows.forEach(a => { am[a.sub_category] = a; });
     res.json(budgets.rows.map(b => ({
       ...b, annual_budget: parseFloat(b.annual_budget),
