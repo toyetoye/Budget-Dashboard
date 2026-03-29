@@ -69,8 +69,56 @@ const initDB = async () => {
         bpr_rows INTEGER DEFAULT 0,
         uploaded_at TIMESTAMP DEFAULT NOW()
       );
+
+      -- Multi-line indent support
+      CREATE TABLE IF NOT EXISTS indent_lines (
+        id SERIAL PRIMARY KEY,
+        indent_id INTEGER NOT NULL REFERENCES indents(id) ON DELETE CASCADE,
+        line_number INTEGER NOT NULL DEFAULT 1,
+        cost_group VARCHAR(255),
+        sub_category VARCHAR(255),
+        cost_element_code VARCHAR(100),
+        description TEXT,
+        cost_usd NUMERIC(14,2) DEFAULT 0,
+        cost_local NUMERIC(14,2) DEFAULT 0,
+        cost_marked_up NUMERIC(14,2) DEFAULT 0,
+        created_at TIMESTAMP DEFAULT NOW()
+      );
+      CREATE INDEX IF NOT EXISTS idx_indent_lines_indent_id ON indent_lines(indent_id);
+      CREATE INDEX IF NOT EXISTS idx_indent_lines_sub_category ON indent_lines(sub_category);
     `);
     console.log('Database tables initialized');
+
+    // Add total columns to indents if they don't exist
+    const colCheck = await client.query(`SELECT column_name FROM information_schema.columns WHERE table_name='indents' AND column_name='total_usd'`);
+    if (colCheck.rows.length === 0) {
+      await client.query(`ALTER TABLE indents ADD COLUMN total_usd NUMERIC(14,2) DEFAULT 0`);
+      await client.query(`ALTER TABLE indents ADD COLUMN total_local NUMERIC(14,2) DEFAULT 0`);
+      await client.query(`ALTER TABLE indents ADD COLUMN line_count INTEGER DEFAULT 1`);
+      console.log('Added total_usd, total_local, line_count columns to indents');
+    }
+
+    // Auto-migrate: move existing indent data into indent_lines (one line per indent)
+    const unmigrated = await client.query(`
+      SELECT id, cost_group, sub_category, cost_element_code, cost_usd, cost_local, cost_marked_up, title
+      FROM indents WHERE id NOT IN (SELECT DISTINCT indent_id FROM indent_lines)
+    `);
+    if (unmigrated.rows.length > 0) {
+      for (const row of unmigrated.rows) {
+        await client.query(`
+          INSERT INTO indent_lines (indent_id, line_number, cost_group, sub_category, cost_element_code, description, cost_usd, cost_local, cost_marked_up)
+          VALUES ($1, 1, $2, $3, $4, $5, $6, $7, $8)
+        `, [row.id, row.cost_group, row.sub_category, row.cost_element_code, row.title || '', row.cost_usd || 0, row.cost_local || 0, row.cost_marked_up || 0]);
+      }
+      // Update totals
+      await client.query(`
+        UPDATE indents SET
+          total_usd = COALESCE((SELECT SUM(cost_usd) FROM indent_lines WHERE indent_id = indents.id), 0),
+          total_local = COALESCE((SELECT SUM(cost_local) FROM indent_lines WHERE indent_id = indents.id), 0),
+          line_count = COALESCE((SELECT COUNT(*) FROM indent_lines WHERE indent_id = indents.id), 0)
+      `);
+      console.log(`Migrated ${unmigrated.rows.length} existing indents to indent_lines`);
+    }
   } finally { client.release(); }
 };
 
