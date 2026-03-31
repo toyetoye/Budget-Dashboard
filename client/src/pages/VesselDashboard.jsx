@@ -48,6 +48,8 @@ export default function VesselDashboard({ vesselIdProp, hideIndents = false }) {
 
   const [bprData, setBprData] = useState(null);
   const [bprLoading, setBprLoading] = useState(false);
+  const [selectedIndents, setSelectedIndents] = useState(new Set());
+  const [bulkDeleting, setBulkDeleting] = useState(false);
   const [bprFilter, setBprFilter] = useState('All');
   const [bprSearch, setBprSearch] = useState('');
   const [bprMeta, setBprMeta] = useState(null);
@@ -149,6 +151,26 @@ export default function VesselDashboard({ vesselIdProp, hideIndents = false }) {
 
   if(loading)return<div className="flex items-center justify-center h-screen text-slate-500 text-sm">Loading...</div>;
   if(!vesselId)return<div className="flex items-center justify-center h-screen text-slate-500 text-sm">No vessel assigned.</div>;
+
+  // ── Bulk select helpers ──
+  const toggleIndentSelect = (id) => setSelectedIndents(prev => {
+    const next = new Set(prev);
+    next.has(id) ? next.delete(id) : next.add(id);
+    return next;
+  });
+  const allFilteredSelected = filtered.length > 0 && filtered.every(i => selectedIndents.has(i.id));
+  const toggleSelectAll = () => setSelectedIndents(allFilteredSelected ? new Set() : new Set(filtered.map(i => i.id)));
+  const handleBulkDelete = async () => {
+    if (!selectedIndents.size) return;
+    if (!confirm(`Delete ${selectedIndents.size} indent(s)? This cannot be undone.`)) return;
+    setBulkDeleting(true);
+    try {
+      await api.bulkDeleteIndents(vesselId, [...selectedIndents]);
+      setSelectedIndents(new Set());
+      loadAll();
+    } catch(e) { alert('Bulk delete failed: ' + e.message); }
+    finally { setBulkDeleting(false); }
+  };
 
   return (
     <div className="p-6 max-w-6xl mx-auto">
@@ -336,15 +358,35 @@ export default function VesselDashboard({ vesselIdProp, hideIndents = false }) {
         </div>}
 
         {/* INDENT TABLE — EXPANDABLE ROWS */}
+        {/* Bulk action bar */}
+        {selectedIndents.size > 0 && (
+          <div className="flex items-center gap-3 px-4 py-2.5 rounded-xl border border-red-500/20 mb-2" style={{background:'rgba(127,29,29,0.12)'}}>
+            <span className="text-xs font-semibold text-red-300">{selectedIndents.size} indent{selectedIndents.size !== 1 ? 's' : ''} selected</span>
+            <button
+              onClick={handleBulkDelete}
+              disabled={bulkDeleting}
+              className="px-3 py-1.5 rounded-lg text-xs font-bold text-white bg-red-600 hover:bg-red-500 disabled:opacity-50 transition-all"
+            >{bulkDeleting ? 'Deleting...' : '🗑 Delete Selected'}</button>
+            <button onClick={() => setSelectedIndents(new Set())} className="px-3 py-1.5 rounded-lg text-xs text-slate-400 hover:text-slate-200 hover:bg-white/5 transition-all">Clear selection</button>
+          </div>
+        )}
         <div className="rounded-xl border border-white/5 overflow-hidden" style={{background:'rgba(15,23,42,0.6)'}}>
           <table className="w-full text-sm"><thead><tr style={{borderBottom:'1px solid rgba(255,255,255,0.06)'}}>
+            <th className="px-3 py-3 w-8">
+              <input type="checkbox" checked={allFilteredSelected} onChange={toggleSelectAll}
+                className="w-3.5 h-3.5 rounded accent-cyan-500 cursor-pointer" />
+            </th>
             {['','Indent #','Title','Lines','Status',indentSrc==='Outport'?'NGN':'','Cost USD'].filter(Boolean).map(h=><th key={h} className="px-4 py-3 text-left text-xs text-slate-600 uppercase">{h}</th>)}
           </tr></thead><tbody>{filtered.map((ind,i)=>{
             const isExpanded = expandedIndent === ind.id;
             const lineCount = ind.lines?.length || 1;
             return <React.Fragment key={ind.id}>
               {/* Main indent row */}
-              <tr className="hover:bg-white/[0.03] transition-colors" style={{borderBottom: isExpanded ? 'none' : '1px solid rgba(255,255,255,0.03)'}}>
+              <tr className={`hover:bg-white/[0.03] transition-colors ${selectedIndents.has(ind.id) ? 'bg-cyan-900/10' : ''}`} style={{borderBottom: isExpanded ? 'none' : '1px solid rgba(255,255,255,0.03)'}}>
+                <td className="px-3 py-3 w-8" onClick={e=>e.stopPropagation()}>
+                  <input type="checkbox" checked={selectedIndents.has(ind.id)} onChange={()=>toggleIndentSelect(ind.id)}
+                    className="w-3.5 h-3.5 rounded accent-cyan-500 cursor-pointer" />
+                </td>
                 <td className="px-2 py-3 w-8">
                   {lineCount > 1 && <button onClick={()=>setExpandedIndent(isExpanded?null:ind.id)} className="w-6 h-6 rounded flex items-center justify-center text-xs text-slate-500 hover:text-cyan-300 hover:bg-white/5 transition-colors">
                     {isExpanded ? '▾' : '▸'}
@@ -364,6 +406,7 @@ export default function VesselDashboard({ vesselIdProp, hideIndents = false }) {
               {/* Expanded line items */}
               {isExpanded && (ind.lines||[]).map((line, li) => (
                 <tr key={`${ind.id}-L${li}`} className="bg-white/[0.01]" style={{borderBottom: li === (ind.lines.length-1) ? '1px solid rgba(255,255,255,0.03)' : '1px solid rgba(255,255,255,0.01)'}}>
+                  <td></td>
                   <td className="pl-6 pr-2 py-2 text-right"><span className="text-[9px] text-slate-600 font-mono">L{li+1}</span></td>
                   <td className="px-4 py-2 text-[11px] text-slate-600 font-mono">{line.cost_element_code||''}</td>
                   <td className="px-4 py-2 text-[11px] text-slate-400">{line.cost_group} → {line.sub_category}</td>
