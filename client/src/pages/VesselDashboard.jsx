@@ -56,7 +56,7 @@ export default function VesselDashboard({ vesselIdProp, hideIndents = false }) {
   const [budgetYear, setBudgetYear] = useState(new Date().getFullYear());
 
   useEffect(()=>{if(vesselId)loadAll();},[vesselId, budgetYear]);
-  const loadAll=async()=>{setLoading(true);try{const[v,b,i,cg]=await Promise.all([api.getVessel(vesselId),api.getBudgets(vesselId,budgetYear),api.getIndents(vesselId),api.getCostGroups()]);setVessel(v);setBudgets(b);setAllIndents(i);setCostGroups(cg);}catch(e){console.error(e);}finally{setLoading(false);}};
+  const loadAll=async()=>{setLoading(true);try{const[v,b,i,cg]=await Promise.all([api.getVessel(vesselId),api.getBudgets(vesselId,budgetYear),api.getIndents(vesselId),api.getCostGroups()]);setVessel(v);setBudgets(b);setAllIndents(i);setCostGroups(cg);}catch(e){console.error(e);}finally{setLoading(false);}if(bprData)loadLatestBPR();};
 
   const ho=allIndents.filter(i=>i.source==='HO'&&!i.is_carried_forward);
   const op=allIndents.filter(i=>i.source==='Outport'&&!i.is_carried_forward);
