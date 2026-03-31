@@ -43,6 +43,8 @@ const api = {
   getIndents: (vid, filters = {}) => { const p = new URLSearchParams(filters).toString(); return apiFetch(`/indents/${vid}${p ? '?' + p : ''}`); },
   createIndent: (vid, i) => apiFetch(`/indents/${vid}`, { method: 'POST', body: JSON.stringify(i) }),
   updateIndent: (vid, id, i) => apiFetch(`/indents/${vid}/${id}`, { method: 'PUT', body: JSON.stringify(i) }),
+  deleteIndent: (vid, id) => apiFetch(`/indents/${vid}/${id}`, { method: 'DELETE' }),
+  bulkDeleteIndents: async (vid, ids) => { for (const id of ids) await apiFetch(`/indents/${vid}/${id}`, { method: 'DELETE' }); },
   getCostGroups: () => apiFetch('/costs'),
 
   // BPR
