@@ -7,6 +7,8 @@ const pool = new Pool({
     ? false
     : process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : false
 });
+// Isolate Budget tables in their own schema on the consolidated DB
+pool.on('connect', client => { client.query('SET search_path TO budget, public'); });
 
 const initDB = async () => {
   const client = await pool.connect();
@@ -123,3 +125,4 @@ const initDB = async () => {
 };
 
 module.exports = { pool, initDB };
+✅ Budget db.js patched
