@@ -55,9 +55,10 @@ router.post('/:vesselId/compare', authenticate, upload.single('file'), async (re
 
     const budgets = await pool.query(
       `SELECT bc.cost_group, bc.sub_category, bc.annual_budget,
-        COALESCE(SUM(i.cost_usd), 0) as actual_spent
+        COALESCE(SUM(il.cost_usd), 0) as actual_spent
       FROM budget_categories bc
-      LEFT JOIN indents i ON i.vessel_id = bc.vessel_id AND i.sub_category = bc.sub_category
+      LEFT JOIN indents i ON i.vessel_id = bc.vessel_id
+      LEFT JOIN indent_lines il ON il.indent_id = i.id AND il.sub_category = bc.sub_category
       WHERE bc.vessel_id = $1 AND bc.year = $2
       GROUP BY bc.cost_group, bc.sub_category, bc.annual_budget
       ORDER BY bc.cost_group, bc.sub_category`, [vid, req.query.year || 2024]);
@@ -122,7 +123,7 @@ router.post('/:vesselId/compare', authenticate, upload.single('file'), async (re
   } catch (err) { console.error('BPR error:', err); res.status(500).json({ error: err.message }); }
 });
 
-// Get latest saved BPR for a vessel (any authenticated user with access)
+// Get latest saved BPR for a vessel — recomputes dashboard actuals live from indent_lines
 router.get('/:vesselId/latest', authenticate, async (req, res) => {
   try {
     const vid = req.params.vesselId;
@@ -136,10 +137,45 @@ router.get('/:vesselId/latest', authenticate, async (req, res) => {
     `, [vid, year]);
     if (!r.rows.length) return res.json(null);
     const row = r.rows[0];
+
+    // Always recompute dashboard actuals from live indent_lines — so deletions/additions reflect immediately
+    const actualsResult = await pool.query(`
+      SELECT il.sub_category, COALESCE(SUM(il.cost_usd), 0) as actual_spent
+      FROM indent_lines il
+      JOIN indents i ON il.indent_id = i.id
+      WHERE i.vessel_id = $1
+      GROUP BY il.sub_category
+    `, [vid]);
+
+    const liveActuals = {};
+    actualsResult.rows.forEach(a => {
+      liveActuals[a.sub_category.toLowerCase().replace(/[^a-z0-9]/g, '')] = parseFloat(a.actual_spent);
+    });
+
+    // Merge live actuals into stored comparison rows
+    const comparison = row.comparison.map(c => {
+      const lookupKey = (c.dashboard_sub || c.sub_category || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+      const liveActual = liveActuals[lookupKey] !== undefined ? liveActuals[lookupKey] : 0;
+      const newDiff = (c.bpr_actual || 0) - liveActual;
+      const newStatus = c.status === 'missing_from_bpr' ? 'missing_from_bpr'
+        : Math.abs(newDiff) < 1 ? 'match'
+        : newDiff > 0 ? 'bpr_higher' : 'dashboard_higher';
+      return { ...c, dashboard_actual: liveActual, difference: newDiff, status: newStatus };
+    });
+
+    const totalDashActual = comparison.reduce((s, c) => s + (c.dashboard_actual || 0), 0);
+    const summary = {
+      ...row.summary,
+      total_dashboard_actual: totalDashActual,
+      matched: comparison.filter(c => c.status === 'match').length,
+      unmatched: comparison.filter(c => c.status === 'unmatched').length,
+      missing: comparison.filter(c => c.status === 'missing_from_bpr').length,
+    };
+
     res.json({
       bpr_rows: row.bpr_rows,
-      comparison: row.comparison,
-      summary: row.summary,
+      comparison,
+      summary,
       vessel_name: '',
       uploaded_by: row.uploaded_by_name,
       uploaded_at: row.uploaded_at,
