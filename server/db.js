@@ -48,7 +48,8 @@ const initDB = async () => {
       ALTER TABLE users DROP CONSTRAINT IF EXISTS users_vessel_id_fkey;
       DO $$ BEGIN
         ALTER TABLE users ADD CONSTRAINT users_vessel_id_fkey FOREIGN KEY (vessel_id) REFERENCES vessels(id) ON DELETE SET NULL;
-      EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+      EXCEPTION WHEN duplicate_object THEN NULL;
+              WHEN others THEN NULL; END $$;
 
       -- Junction table for superintendent multi-vessel assignment
       CREATE TABLE IF NOT EXISTS user_vessels (
