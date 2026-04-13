@@ -17,9 +17,9 @@ export default function Login() {
     <div className="min-h-screen flex items-center justify-center" style={{ background: 'linear-gradient(180deg,#0B1120,#0F172A,#111827)' }}>
       <div className="w-full max-w-sm">
         <div className="text-center mb-8">
-          <div className="w-14 h-14 rounded-2xl mx-auto mb-4 flex items-center justify-center text-xl font-bold text-white" style={{ background: 'linear-gradient(135deg,#0F766E,#0E7490)' }}>FB</div>
+          <img src="/forcap-logo.png" alt="FORCAP" style={{height:'96px',width:'auto',display:'block',margin:'0 auto 16px'}} />
           <h1 className="text-2xl font-bold text-slate-100">Fleet Budget</h1>
-          <p className="text-sm text-slate-500 mt-1">Vessel Budget Management</p>
+          <p className="text-sm text-slate-500 mt-1">FORCAP — Vessel Budget Management</p>
         </div>
         <div className="rounded-2xl p-6 border border-white/5" style={{ background: 'rgba(15,23,42,0.7)' }}>
           {error && <div className="mb-4 px-4 py-2.5 rounded-lg text-sm text-red-300 bg-red-900/20 border border-red-800/30">{error}</div>}
